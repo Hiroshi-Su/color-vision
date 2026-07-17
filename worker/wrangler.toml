@@ -1,0 +1,28 @@
+name = "color-vision-worker"
+main = "src/index.ts"
+compatibility_date = "2024-11-01"
+compatibility_flags = ["nodejs_compat"]
+
+[[d1_databases]]
+binding = "DB"
+database_name = "color-vision-db"
+database_id = "853962ae-2006-46d1-97f5-25a69ff7b35e"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "0e525676bccc4ddabe12f2528d6d4973"
+
+[durable_objects]
+bindings = [
+  { name = "COLOR_HUB", class_name = "ColorHub" }
+]
+
+[[migrations]]
+tag = "v1"
+new_sqlite_classes = ["ColorHub"]
+
+[vars]
+PYTHON_WS_URL = "ws://localhost:8765"
+# D1/KVへの永続化スイッチ。"true"にすると保存が有効になる（要 wrangler deploy）
+# リアルタイム配信（ColorHub/LED同期）はこの設定に関係なく常に動作する
+PERSIST_ENABLED = "false"

@@ -1,0 +1,17 @@
+node_modules/
+.env
+.env.local
+__pycache__/
+venv/
+.wrangler/
+.output/
+.nuxt/
+dist/
+*.pyc
+.DS_Store
+
+# ローカル専用ドキュメント（コミットしない）
+doc/
+
+# ESP32 firmware secrets
+secrets.h
