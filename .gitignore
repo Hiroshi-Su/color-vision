@@ -11,7 +11,7 @@ dist/
 .DS_Store
 
 # ローカル専用ドキュメント（コミットしない）
-doc/
+docs/
 
 # ESP32 firmware secrets
 secrets.h
