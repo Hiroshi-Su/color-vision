@@ -50,6 +50,17 @@ const char* WS_PATH = "/ws";
 #define FADE_AMOUNT 40          // 色遷移の速さ 0〜255（大きいほど速い）
 #define FRAME_INTERVAL_MS 20    // 描画更新間隔（50fps）
 
+// --- マトリクス(matrixモード)配線設定 ---
+// 実物のLEDグリッドに合わせてここだけ書き換える。
+// ※ NUM_LEDS は MATRIX_WIDTH * MATRIX_HEIGHT 以上にしておくこと
+//   （例: 16x16 パネルなら NUM_LEDS を 256 に）
+#define MATRIX_WIDTH        16    // 横のLED個数
+#define MATRIX_HEIGHT       16    // 縦のLED個数
+#define MATRIX_SERPENTINE   true  // true=1行(列)ごとに向きを反転する蛇行配線 / false=毎行同じ向き
+#define MATRIX_VERTICAL     false // false=横走り(行ごとに並ぶ) / true=縦走り(列ごとに並ぶ)
+// DI(データ入力)を最初につなぐ物理的な角: 0=左上 1=右上 2=左下 3=右下
+#define MATRIX_START_CORNER 2     // 左下スタート
+
 // ================================================================
 
 CRGB leds[NUM_LEDS];        // 現在表示中の色
@@ -87,8 +98,60 @@ void setPaletteTarget(JsonArray colors) {
 }
 
 // ----------------------------------------------------------------
+// マトリクス座標変換: 画面上の論理座標(x=左から, y=上から) を
+// 物理的なLEDインデックスに変換する。
+//
+// 蛇行(サーペンタイン)配線・走行方向・スタート角をパラメータ化しているので、
+// 実物のレイアウトが決まったら上部の MATRIX_* を書き換えるだけで対応できる。
+// analyzer は「画面そのままの向き(左上原点・行優先)」で送ってくるため、
+// 画面の向きの補正はすべてここで吸収する。
+// ----------------------------------------------------------------
+int xyToIndex(int x, int y) {
+  const bool startLeft = (MATRIX_START_CORNER == 0 || MATRIX_START_CORNER == 2);
+  const bool startTop  = (MATRIX_START_CORNER == 0 || MATRIX_START_CORNER == 1);
+
+  if (!MATRIX_VERTICAL) {
+    // 横走り: 行が積み上がっていく
+    int ry = startTop ? y : (MATRIX_HEIGHT - 1 - y);   // スタート辺から数えた行番号
+    bool ltr = startLeft;                              // その行が左→右か
+    if (MATRIX_SERPENTINE && (ry & 1)) ltr = !ltr;     // 奇数行は反転
+    int col = ltr ? x : (MATRIX_WIDTH - 1 - x);
+    return ry * MATRIX_WIDTH + col;
+  } else {
+    // 縦走り: 列が横に並んでいく
+    int cx = startLeft ? x : (MATRIX_WIDTH - 1 - x);   // スタート辺から数えた列番号
+    bool ttb = startTop;                               // その列が上→下か
+    if (MATRIX_SERPENTINE && (cx & 1)) ttb = !ttb;     // 奇数列は反転
+    int row = ttb ? y : (MATRIX_HEIGHT - 1 - y);
+    return cx * MATRIX_HEIGHT + row;
+  }
+}
+
+// ----------------------------------------------------------------
+// マトリクス描画: pixels[] (左上原点・行優先の [r,g,b] 配列) を
+// 配線に合わせてLEDへ割り当てる
+// ----------------------------------------------------------------
+void setMatrixTarget(JsonArray pixels) {
+  if (pixels.size() == 0) return;
+
+  int n = pixels.size();
+  for (int i = 0; i < n; i++) {
+    int x = i % MATRIX_WIDTH;
+    int y = i / MATRIX_WIDTH;
+    if (y >= MATRIX_HEIGHT) break;
+
+    JsonArray rgb = pixels[i];
+    if (rgb.size() < 3) continue;
+    CRGB col(rgb[0].as<uint8_t>(), rgb[1].as<uint8_t>(), rgb[2].as<uint8_t>());
+
+    int idx = xyToIndex(x, y);
+    if (idx >= 0 && idx < NUM_LEDS) target[idx] = col;
+  }
+}
+
+// ----------------------------------------------------------------
 // 受信JSONのディスパッチ（LED_RD.md セクション7のモード設計に対応）
-// 今はpaletteのみ実装。matrix / reactive は将来ここに追加する
+// palette（5色帯）と matrix（低解像度映像）に対応。reactive は将来ここに追加する
 // ----------------------------------------------------------------
 void handleMessage(uint8_t* payload, size_t length) {
   JsonDocument doc;
@@ -102,6 +165,8 @@ void handleMessage(uint8_t* payload, size_t length) {
 
   if (strcmp(mode, "palette") == 0) {
     setPaletteTarget(doc["colors"].as<JsonArray>());
+  } else if (strcmp(mode, "matrix") == 0) {
+    setMatrixTarget(doc["pixels"].as<JsonArray>());
   } else {
     Serial.printf("[json] unknown mode: %s\n", mode);
   }

@@ -7,9 +7,18 @@ type ColorEntry = {
   percentage: number
 }
 
+type MatrixPayload = {
+  mode: 'matrix'
+  width: number
+  height: number
+  pixels: [number, number, number][]
+}
+
 type ColorResult = {
   colors: ColorEntry[]
   dominant: string
+  // analyzerがmatrixモードのとき同梱される（プレビュー用）
+  matrix?: MatrixPayload
 }
 
 export function useWebSocket(url: string) {

@@ -26,6 +26,23 @@ def build_palette_payload(result: dict) -> dict:
     }
 
 
+def build_matrix_payload(matrix_result: dict) -> dict:
+    """extract_matrix() の結果を LED 向けの matrix モード JSON に変換する。
+
+    フォーマットは docs/LED_RD.md セクション7準拠:
+    {"mode": "matrix", "width": W, "height": H, "pixels": [[r,g,b], ...]}
+
+    pixels は左上原点・行優先(row-major)。ESP32側が配線に合わせて
+    (x, y) → LEDインデックスの座標変換を行う。
+    """
+    return {
+        "mode": "matrix",
+        "width": matrix_result.get("width", 0),
+        "height": matrix_result.get("height", 0),
+        "pixels": matrix_result.get("pixels", []),
+    }
+
+
 class ColorHubForwarder:
     """ColorHub への常時接続を維持し、色データを転送する。
 
