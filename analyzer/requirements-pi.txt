@@ -1,0 +1,12 @@
+# Raspberry Pi 専用の追加依存（Mac/Linuxではインストールできないので分離）
+#
+#   sudo pip3 install -r requirements-pi.txt --break-system-packages
+#
+# CSIカメラ（Piカメラ）を使う場合は picamera2 も必要。
+# pipではなくaptで入れるのが公式推奨:
+#   sudo apt install -y python3-picamera2
+#
+# OpenCV も apt 版の方がPiでは軽量・安定:
+#   sudo apt install -y python3-opencv
+
+rpi_ws281x==5.0.0

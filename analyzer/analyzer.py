@@ -4,12 +4,29 @@ from sklearn.cluster import KMeans
 from utils import rgb_to_hsl, rgb_to_hex
 
 
-def extract_colors(frame_bytes: bytes, n_colors: int = 5) -> dict:
+def _decode(frame_bytes: bytes) -> np.ndarray:
+    """JPEGバイナリをBGR配列にデコードする。"""
     arr = np.frombuffer(frame_bytes, dtype=np.uint8)
     img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
     if img is None:
         raise ValueError("Failed to decode image")
+    return img
 
+
+def extract_colors(frame_bytes: bytes, n_colors: int = 5) -> dict:
+    """JPEGバイナリから主要色を抽出する（ブラウザ/ESP32-CAMからの入力用）。"""
+    return extract_colors_bgr(_decode(frame_bytes), n_colors)
+
+
+def extract_colors_bgr(img: np.ndarray, n_colors: int = 5) -> dict:
+    """BGR配列から主要色を抽出する。
+
+    Piでカメラから直接撮影する場合はこちらを使う。
+    カメラから得たフレームをJPEGにエンコードして即デコードし直す
+    無駄な往復を省ける（Piで1フレームあたり数ms程度の節約）。
+    処理時間の大半はK-meansなので劇的には速くならないが、
+    不要な変換を挟まない分だけ確実に軽い。
+    """
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     pixels = img_rgb.reshape(-1, 3).astype(np.float32)
 
@@ -79,11 +96,16 @@ def extract_matrix(
 
     pixels[i] は (row, col) = (i // width, i % width) のマスの [r, g, b]。
     """
-    arr = np.frombuffer(frame_bytes, dtype=np.uint8)
-    img = cv2.imdecode(arr, cv2.IMREAD_COLOR)
-    if img is None:
-        raise ValueError("Failed to decode image")
+    return extract_matrix_bgr(_decode(frame_bytes), width, height, crop)
 
+
+def extract_matrix_bgr(
+    img: np.ndarray,
+    width: int = 16,
+    height: int = 16,
+    crop: bool = True,
+) -> dict:
+    """BGR配列から低解像度グリッドを作る（Piのローカル撮影用）。"""
     img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
     if crop:
         img_rgb = _center_crop_to_aspect(img_rgb, width, height)

@@ -29,9 +29,18 @@
 #include "secrets.h"
 
 // --- ColorHub (Cloudflare Worker) ---
+// Tunnelモードで検証する場合はここを相手拠点（またはローカルPi）のURLに変える
+// 例: WS_HOST = "xxxx.trycloudflare.com" / WS_PATH = "/"
 const char* WS_HOST = "color-vision-worker.color-vision.workers.dev";
 const uint16_t WS_PORT = 443;   // wss://
 const char* WS_PATH = "/ws";
+
+// --- 表示する拠点の選択 ---
+// analyzer側で LOCATION（送信元タグ）を設定している場合、
+// ここに指定した拠点のデータだけを表示する。
+// 例: 東京のESP32に "kanazawa" を指定 → 金沢の色だけで光る（クロス表示）
+// "" （空文字）なら全拠点のデータを受け入れる（フィルタなし）
+const char* LISTEN_SOURCE = "";
 
 // --- LED ---
 // LEDの個数はここを変えるだけ。描画はpercentage比率ベースなので
@@ -54,8 +63,8 @@ const char* WS_PATH = "/ws";
 // 実物のLEDグリッドに合わせてここだけ書き換える。
 // ※ NUM_LEDS は MATRIX_WIDTH * MATRIX_HEIGHT 以上にしておくこと
 //   （例: 16x16 パネルなら NUM_LEDS を 256 に）
-#define MATRIX_WIDTH        16    // 横のLED個数
-#define MATRIX_HEIGHT       16    // 縦のLED個数
+#define MATRIX_WIDTH        144   // 横のLED個数
+#define MATRIX_HEIGHT       1     // 縦のLED個数
 #define MATRIX_SERPENTINE   true  // true=1行(列)ごとに向きを反転する蛇行配線 / false=毎行同じ向き
 #define MATRIX_VERTICAL     false // false=横走り(行ごとに並ぶ) / true=縦走り(列ごとに並ぶ)
 // DI(データ入力)を最初につなぐ物理的な角: 0=左上 1=右上 2=左下 3=右下
@@ -159,6 +168,12 @@ void handleMessage(uint8_t* payload, size_t length) {
   if (err) {
     Serial.printf("[json] parse error: %s\n", err.c_str());
     return;
+  }
+
+  // 拠点フィルタ: LISTEN_SOURCE 指定時は該当拠点のデータ以外を無視する
+  if (LISTEN_SOURCE[0] != '\0') {
+    const char* src = doc["source"] | "";
+    if (strcmp(src, LISTEN_SOURCE) != 0) return;
   }
 
   const char* mode = doc["mode"] | "palette";

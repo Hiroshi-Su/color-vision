@@ -36,7 +36,11 @@ export function useWebSocket(url: string) {
       setTimeout(connect, 2000)
     }
     ws.value.onmessage = (event) => {
-      const result: ColorResult = JSON.parse(event.data)
+      const data = JSON.parse(event.data)
+      // トップレベルにmodeを持つメッセージはLED向け配信（palette/matrix中継）
+      // なので無視する。解析結果（ColorResult）はmodeを持たない
+      if (data && typeof data.mode === 'string') return
+      const result: ColorResult = data
       lastResult.value = result
       onColorUpdate.value?.(result)
     }
