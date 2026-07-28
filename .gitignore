@@ -10,8 +10,8 @@ dist/
 *.pyc
 .DS_Store
 
-# ローカル専用ドキュメント（コミットしない）
-docs/
-
 # ESP32 firmware secrets
 secrets.h
+
+# Claude Code のローカル設定
+.claude/
