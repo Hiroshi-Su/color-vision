@@ -13,6 +13,7 @@
 2. [配線](#2-配線)
 3. [OS側の下準備](#3-os側の下準備)
 4. [ソフトウェアのインストール](#4-ソフトウェアのインストール)
+   - 動作確認のうち [⑤ 任意の色を送ってテストする](#-任意の色を送ってテストする) はデバッグ時に便利
 5. [設定（.env）](#5-設定env)
 6. [動作確認](#6-動作確認)
 7. [自動起動（systemd）](#7-自動起動systemd)
@@ -197,6 +198,29 @@ LED_SOURCE=tokyo        # 映したい拠点名。または any（他拠点す�
 `CAPTURE_ENABLED=false` のときは受け取る色がハブしかないため、`COLORHUB_WS_URL` が未設定だとエラーで終了する。また `LED_SOURCE=self` は自分が撮影しないので光らない（警告が出る）。
 
 起動時のログで `Role : display only` と表示されれば表示専用モードで動いている。
+
+---
+
+### ⑤ 任意の色を送ってテストする
+
+カメラや解析を通さず直接色を指定できるツール。**「配線が悪いのか / ハブ接続が悪いのか / 解析が悪いのか」の切り分け**に使う。
+
+```bash
+python3 send_test_color.py red              # 色名
+python3 send_test_color.py "#ff00ff"        # HEX
+python3 send_test_color.py 255,0,255        # RGB
+python3 send_test_color.py red:70 blue:30   # 帯グラフ（占有率指定）
+python3 send_test_color.py --cycle          # 赤→緑→青→白→消灯を巡回
+python3 send_test_color.py --off            # 消灯
+python3 send_test_color.py red --source osaka   # 拠点フィルタの確認
+python3 send_test_color.py --matrix red     # matrixモードで送る
+python3 send_test_color.py --local red      # ローカルのanalyzerに直接送る
+```
+
+接続先は `.env` の `COLORHUB_WS_URL`（`--url` で上書き可）。`sudo` は不要。
+`wscat` はNode製でPiでは使えないため、その代わりに使う。
+
+受信側が拠点名でフィルタしている場合（ESP32の `LISTEN_SOURCE` / Piの `LED_SOURCE`）は、`--source` をその拠点名に合わせないと光らないので注意。
 
 ---
 
