@@ -28,7 +28,12 @@ class UsbCamera:
         import cv2
 
         self._cv2 = cv2
-        self._cap = cv2.VideoCapture(device)
+        # V4L2を直接指定する。既定ではGStreamerを先に試して失敗し、
+        # 「Internal data stream error」等の警告を出してからV4L2に落ちるため。
+        # Linux以外（Macでの開発時）はCAP_V4L2が使えないので既定にフォールバック。
+        self._cap = cv2.VideoCapture(device, getattr(cv2, "CAP_V4L2", 0))
+        if not self._cap.isOpened():
+            self._cap = cv2.VideoCapture(device)
         if not self._cap.isOpened():
             raise CameraError(f"USB camera not found (device={device})")
         self._cap.set(cv2.CAP_PROP_FRAME_WIDTH, width)

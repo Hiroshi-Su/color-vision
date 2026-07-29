@@ -97,19 +97,45 @@ ls /dev/video*                # video0 等が出ればOK
 
 ## 4. ソフトウェアのインストール
 
+重いライブラリ（OpenCV・picamera2）は **apt版**を使う。pip版はPiでのビルドが重く、picamera2はpipでの導入が事実上困難。
+
 ```bash
-# 基本パッケージ（OpenCVはapt版の方がPiでは軽量・安定）
 sudo apt update
-sudo apt install -y python3-opencv python3-numpy python3-sklearn git
+sudo apt install -y python3-opencv python3-numpy python3-sklearn
 
-# CSIカメラを使う場合のみ
+# CSIカメラを使う場合のみ（USBウェブカメラなら不要）
 sudo apt install -y python3-picamera2
-
-# LED制御ライブラリとその他の依存
-cd ~/color-vision/analyzer
-sudo pip3 install -r requirements-pi.txt --break-system-packages
-sudo pip3 install websockets python-dotenv --break-system-packages
 ```
+
+### venvを使う場合（推奨）
+
+**`--system-site-packages` を必ず付ける。** これがないとaptで入れたOpenCV・picamera2がvenvから見えない。
+
+```bash
+cd ~/color-vision/analyzer
+python3 -m venv --system-site-packages venv
+source venv/bin/activate
+pip install -r requirements-pi.txt websockets python-dotenv
+```
+
+実行時は **venvのpythonを絶対パスで指定する。**
+
+```bash
+sudo -E ./venv/bin/python capture_pi.py --test
+```
+
+`sudo -E python3 ...` と書くと、sudoが `secure_path` でPATHを上書きするため**venvが無効になりシステムのPythonが使われる**（`ModuleNotFoundError: rpi_ws281x` の典型的な原因）。`activate` しているかどうかに関係なく起こるので注意。
+
+`send_test_color.py` はroot不要なので、activateした状態でそのまま実行できる。
+
+### venvを使わない場合
+
+```bash
+cd ~/color-vision/analyzer
+sudo pip3 install -r requirements-pi.txt websockets python-dotenv --break-system-packages
+```
+
+以降のコマンドは `sudo -E python3 capture_pi.py` でよい。
 
 ---
 
@@ -277,5 +303,7 @@ journalctl -u colorvision -f           # ログをリアルタイム表示
 | カメラが見つからない | バックエンド違い | `CAMERA_BACKEND=usb` または `csi` を明示 |
 | CSIカメラがcv2で開けない | libcameraスタック | `python3-picamera2` を入れ `CAMERA_BACKEND=csi` |
 | 設定が反映されない | 環境変数が渡っていない | `sudo -E` を使う（`-E` が必須） |
+| venvなのに `ModuleNotFoundError` | sudoがPATHを上書きしvenvが無効 | `sudo -E ./venv/bin/python ...` と絶対パスで指定 |
+| venvから `cv2` / `picamera2` が見えない | `--system-site-packages` なしでvenv作成 | venvを作り直す（`python3 -m venv --system-site-packages venv`） |
 | 時間帯制御がずれる | タイムゾーンがUTC | `sudo timedatectl set-timezone Asia/Tokyo` |
 | 動作が重い・fpsが出ない | 解析負荷 | `CAPTURE_FPS` を下げる（5程度）。Pi 3では特に有効 |
