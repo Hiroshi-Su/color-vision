@@ -1,0 +1,46 @@
+# Color Vision — Raspberry Pi 自動起動ユニット
+#
+# rpi_ws281x が DMA アクセスのため root を必要とするので User=root で動かす。
+# systemd 経由なら手動で sudo を打つ必要はなくなる。
+#
+# インストール:
+#   sudo cp deploy/colorvision.service /etc/systemd/system/
+#   sudo systemctl daemon-reload
+#   sudo systemctl enable --now colorvision
+#
+# 状態確認 / ログ:
+#   sudo systemctl status colorvision
+#   journalctl -u colorvision -f
+#
+# 設定を変えたら:
+#   sudo systemctl restart colorvision
+#
+# ※ パスが違う場合は WorkingDirectory / ExecStart / EnvironmentFile を書き換える。
+#    確認方法: analyzer ディレクトリで `pwd` と `which python`
+
+[Unit]
+Description=Color Vision (camera color extraction + WS2812B LED)
+# ネットワークが繋がってから起動する（ColorHub接続のため）
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/home/admin-user/app/color-vision/analyzer
+# venv の python を絶対パスで指定する（PATH に依存しない）
+ExecStart=/home/admin-user/app/color-vision/analyzer/venv/bin/python capture_pi.py
+# .env は capture_pi.py 内の load_dotenv() が読むので EnvironmentFile は不要。
+# systemd 側で管理したい場合は以下を有効にする（KEY=VALUE 形式のみ、コメント可）
+# EnvironmentFile=/home/admin-user/app/color-vision/analyzer/.env
+
+# クラッシュやWiFi断で落ちても自動復帰する（展示運用で重要）
+Restart=always
+RestartSec=5
+
+# ログをjournaldに送る
+StandardOutput=journal
+StandardError=journal
+
+[Install]
+WantedBy=multi-user.target
