@@ -97,6 +97,8 @@ ls /dev/video*                # video0 等が出ればOK
 
 ## 4. ソフトウェアのインストール
 
+> **パスについて:** 以下ではリポジトリを `~/app/color-vision`（＝ `/home/<ユーザー名>/app/color-vision`）に clone した前提で書く。これは実機での配置例なので、別の場所に置いた場合は各コマンドの `~/app/color-vision` を自分のパスに読み替える（`cd analyzer && pwd` で確認できる）。systemd と sudoers だけは `~` が使えず絶対パスが必要なので、後述の該当箇所で実パスに合わせて書き換える。
+
 重いライブラリ（OpenCV・picamera2）は **apt版**を使う。pip版はPiでのビルドが重く、picamera2はpipでの導入が事実上困難。
 
 ```bash
@@ -112,7 +114,7 @@ sudo apt install -y python3-picamera2
 **`--system-site-packages` を必ず付ける。** これがないとaptで入れたOpenCV・picamera2がvenvから見えない。
 
 ```bash
-cd ~/color-vision/analyzer
+cd ~/app/color-vision/analyzer
 python3 -m venv --system-site-packages venv
 source venv/bin/activate
 pip install -r requirements-pi.txt websockets python-dotenv
@@ -131,7 +133,7 @@ sudo -E ./venv/bin/python capture_pi.py --test
 ### venvを使わない場合
 
 ```bash
-cd ~/color-vision/analyzer
+cd ~/app/color-vision/analyzer
 sudo pip3 install -r requirements-pi.txt websockets python-dotenv --break-system-packages
 ```
 
@@ -142,7 +144,7 @@ sudo pip3 install -r requirements-pi.txt websockets python-dotenv --break-system
 ## 5. 設定（.env）
 
 ```bash
-cd ~/color-vision/analyzer
+cd ~/app/color-vision/analyzer
 cp .env.example .env
 nano .env
 ```
@@ -184,7 +186,7 @@ sudo timedatectl set-timezone Asia/Tokyo
 ### ① LEDの配線チェック
 
 ```bash
-cd ~/color-vision/analyzer
+cd ~/app/color-vision/analyzer
 sudo -E python3 capture_pi.py --test
 ```
 
@@ -250,38 +252,106 @@ python3 send_test_color.py --local red      # ローカルのanalyzerに直接�
 
 ---
 
+## 6.5 ヴィジュアルも同時に表示する（構成C）
+
+`capture_pi.py` がカメラ・解析・LEDを担当したまま、**ブラウザには描画だけをさせる**構成。
+ブラウザからカメラ取得・JPEG圧縮・送信の処理が消えるため、Pi 4でLEDと映像を同時に動かせる。
+
+```
+capture_pi.py（カメラ→K-means→LED＋ColorHubへ送信）
+                            ↓
+          ブラウザ /view（ColorHubから受信 → シェーダー描画のみ）
+```
+
+**デスクトップ版のOSが必要**（Lite版にはブラウザがない）。
+
+### Pi側の設定
+
+`.env` に配信先と拠点名を設定する。
+
+```bash
+COLORHUB_WS_URL=wss://color-vision-worker.color-vision.workers.dev/ws
+LOCATION=tokyo
+```
+
+### ブラウザで開くURL
+
+接続先の ColorHub は既定で `NUXT_PUBLIC_COLORHUB_WS_URL`（未設定なら本番のColorHub）。**表示の切り替えはページURLのクエリ（`?key=value`、複数は `&` で連結）で行う**。設定ファイルではなくアドレスバーに直接打ち込む。
+
+| クエリ | 効果 | 例 |
+|---|---|---|
+| （なし） | 全拠点の色を受信して表示 | `/view` |
+| `?source=<拠点名>` | その拠点の色だけ表示（他は無視）。送信側の `LOCATION` と一致させる | `/view?source=kanazawa` |
+| `?ui=0` | 左上のステータス表示を隠す（展示・全画面用） | `/view?ui=0` |
+| `?smooth=1` | matrixのマス間をなめらかに補間（既定はLED忠実のくっきり表示） | `/view?smooth=1` |
+| `?url=wss://...` | 接続先ColorHubを上書き（通常は不要） | `/view?url=wss://...` |
+
+複数まとめる例（金沢の色を・UIなし・なめらか表示で全画面）:
+
+```
+https://<Pagesのドメイン>/view?source=kanazawa&ui=0&smooth=1
+```
+
+画面左上に `RECEIVING` と受信件数が出る。色が来ない場合はその下に原因のヒントが表示される。
+
+**注意点**
+
+- **HTTPSページからは `wss://` でないと接続できない**（ブラウザのmixed content制限）。ColorHubは `wss://` なので問題ない
+- `/view` は保存処理（KV/D1）を行わない。保存は撮影側の責務にしてあるため、重複書き込みが起きない
+- `/view` は **palette / matrix 両対応**。届いたモードで自動的に表示を切り替える（palette=シェーダー、matrix=グリッド）。matrixの見た目は既定でくっきり、`?smooth=1` で補間表示
+- 開発中は **Macのブラウザで開く**のが最も軽い（Piの負荷ゼロ）。同じURLでどのマシンからでも同じ色が見える
+
+### Pagesへのデプロイ（Macで実行）
+
+```bash
+cd frontend
+npm run build
+npx wrangler pages deploy .output/public
+```
+
+Piでビルドする必要はない（Node.jsもnode_modulesも不要）。
+
+---
+
 ## 7. 自動起動（systemd）
 
-```bash
-sudo nano /etc/systemd/system/colorvision.service
-```
+`rpi_ws281x` がDMAアクセスのためrootを必要とするため、毎回 `sudo` を打つことになる。**systemdに登録すればその手間がなくなり、電源ONで自動起動する。**
 
-```ini
-[Unit]
-Description=Color Vision (camera + LED)
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-WorkingDirectory=/home/pi/color-vision/analyzer
-ExecStart=/usr/bin/python3 /home/pi/color-vision/analyzer/capture_pi.py
-Restart=always
-RestartSec=5
-User=root
-
-[Install]
-WantedBy=multi-user.target
-```
+リポジトリに用意済みのユニットファイルを使う。
 
 ```bash
+cd ~/app/color-vision
+sudo cp deploy/colorvision.service /etc/systemd/system/
 sudo systemctl daemon-reload
 sudo systemctl enable --now colorvision
-sudo systemctl status colorvision      # 起動確認
-journalctl -u colorvision -f           # ログをリアルタイム表示
 ```
 
-これで電源を入れるだけで自動起動する。`Restart=always` によりクラッシュしても自動復帰する。
+```bash
+sudo systemctl status colorvision      # 起動確認
+journalctl -u colorvision -f           # ログをリアルタイム表示
+sudo systemctl restart colorvision     # .env を変えたら再起動
+sudo systemctl stop colorvision        # 手動実行したいとき（GPIOの競合を避ける）
+```
+
+`Restart=always` によりクラッシュやWiFi断でも自動復帰する。
+
+**パスが違う場合**は `deploy/colorvision.service` の `WorkingDirectory` と `ExecStart` を書き換える（`pwd` で確認）。
+
+### 開発中にsudoのパスワード入力を省く
+
+systemdを使わず手動で何度も起動し直す場合は、このコマンドだけパスワード不要にできる。
+
+```bash
+sudo visudo -f /etc/sudoers.d/colorvision
+```
+
+```
+admin-user ALL=(root) NOPASSWD: /home/admin-user/app/color-vision/analyzer/venv/bin/python
+```
+
+`admin-user` は自分のログインユーザー名に、パスは venv の python の実パスに置き換える（`whoami` と `echo $PWD/venv/bin/python` で確認）。
+
+**注意:** systemdで動かしている間に手動起動すると、同じGPIOを2つのプロセスが叩いて競合する。手動で試すときは先に `sudo systemctl stop colorvision` すること。
 
 展示運用では合わせて以下も検討する。
 
